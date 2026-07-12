@@ -22,6 +22,9 @@ class WebActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val scope = MainScope()
+    private var loginAttempts = 0
+    private var loginDone = false
+    private var mainLoaded = false
 
     private val vpnAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -43,6 +46,31 @@ class WebActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                val u = url ?: return
+                if (u.contains("/user/login")) {
+                    injectLogin()
+                    return
+                }
+                if (u.contains("/mv")) {
+                    webView.evaluateJavascript(
+                        "(function(){var t=document.body?document.body.innerText:'';" +
+                        "if(/安全验证|计算中|浏览器计算验证/.test(t)) return 'POW';" +
+                        "if(/受限|登录后继续/.test(t)) return 'RESTRICTED';" +
+                        "return 'OK';})();"
+                    ) { r ->
+                        when (r) {
+                            "\"RESTRICTED\"" -> view?.loadUrl(LOGIN_URL)
+                            "\"OK\"" -> mainLoaded = true
+                        }
+                    }
+                    return
+                }
+                if (loginDone && !mainLoaded) {
+                    view?.loadUrl(SITE_URL)
+                }
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
                 if (url.contains("quark.cn") || url.contains("pan.quark")) {
@@ -93,6 +121,41 @@ class WebActivity : AppCompatActivity() {
         }
     }
 
+    private fun injectLogin() {
+        val js = """
+            (function(){
+              try{
+                var u=document.querySelector('input[name=username]');
+                var p=document.querySelector('input[name=password]');
+                var b=document.querySelector('#button');
+                if(!u||!p||!b) return 'NOFORM';
+                if(u.value) return 'FILLED';
+                var s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+                s.call(u,'$ACCOUNT');
+                u.dispatchEvent(new Event('input',{bubbles:true}));
+                s.call(p,'$PASSWORD');
+                p.dispatchEvent(new Event('input',{bubbles:true}));
+                b.click();
+                return 'OK';
+              }catch(e){return 'ERR';}
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js) { r ->
+            when (r) {
+                "\"OK\"" -> {
+                    loginDone = true
+                    loginAttempts = 0
+                }
+                "\"NOFORM\"" -> {
+                    if (loginAttempts < 12) {
+                        loginAttempts++
+                        webView.postDelayed({ injectLogin() }, 600)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
@@ -100,6 +163,9 @@ class WebActivity : AppCompatActivity() {
 
     companion object {
         private const val SITE_URL = "https://www.xn--wcv59z.com/mv"
+        private const val LOGIN_URL = "https://www.xn--wcv59z.com/user/login"
+        private const val ACCOUNT = "415943059@qq.com"
+        private const val PASSWORD = "123456"
         private const val SUB_URL =
             "https://sub.wjkc66.vip:1443/api/subscript/flclash/69f1ca9326979f2c3ec76dcc/99819b23-5576-44ba-8c2e-150a570f36a5"
         private const val SUB_NAME = "我的订阅"
