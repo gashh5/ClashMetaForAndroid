@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,6 +28,7 @@ import com.github.kr328.clash.util.withProfile
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class WebActivity : AppCompatActivity() {
 
@@ -38,28 +40,26 @@ class WebActivity : AppCompatActivity() {
     private var mainLoaded = false
     private var urlLoaded = false
 
-    private val observer = object : Broadcasts.Observer {
-        override fun onStarted() { loadUrlNow() }
+    private val loadTimeout = Runnable { loadSite() }
+
+    private val clashObserver = object : Broadcasts.Observer {
+        override fun onStarted() {
+            webView.removeCallbacks(loadTimeout)
+            loadSite()
+        }
         override fun onServiceRecreated() {}
         override fun onStopped(cause: String?) {}
         override fun onProfileChanged() {}
-        override fun onProfileUpdateCompleted(uuid: java.util.UUID?) {}
-        override fun onProfileUpdateFailed(uuid: java.util.UUID?, reason: String?) {}
+        override fun onProfileUpdateCompleted(uuid: UUID?) {}
+        override fun onProfileUpdateFailed(uuid: UUID?, reason: String?) {}
         override fun onProfileLoaded() {}
-    }
-
-    private fun loadUrlNow() {
-        if (urlLoaded) return
-        urlLoaded = true
-        webView.post { webView.loadUrl(SITE_URL) }
     }
 
     private val vpnAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { r ->
         if (r.resultCode == RESULT_OK) {
-            if (Remote.broadcasts.clashRunning) loadUrlNow()
-            else startClashService()
+            startClashService()
         } else {
             Toast.makeText(this, "未授权 VPN，代理无法启动", Toast.LENGTH_LONG).show()
         }
@@ -98,6 +98,10 @@ class WebActivity : AppCompatActivity() {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
 
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        cm.setAcceptThirdPartyCookies(webView, true)
+
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 val u = url ?: return
@@ -117,6 +121,7 @@ class WebActivity : AppCompatActivity() {
                             "\"OK\"" -> {
                                 mainLoaded = true
                                 loadingView.visibility = View.GONE
+                                CookieManager.getInstance().flush()
                             }
                         }
                     }
@@ -150,10 +155,14 @@ class WebActivity : AppCompatActivity() {
             }
         })
 
-        Remote.broadcasts.addObserver(observer)
-        webView.postDelayed({ loadUrlNow() }, 8000)
-
+        Remote.broadcasts.addObserver(clashObserver)
         connectAndLoad()
+    }
+
+    private fun loadSite() {
+        if (urlLoaded) return
+        urlLoaded = true
+        webView.loadUrl(SITE_URL)
     }
 
     private fun connectAndLoad() {
@@ -170,11 +179,15 @@ class WebActivity : AppCompatActivity() {
                 Toast.makeText(this@WebActivity, "订阅导入失败: ${e.message}", Toast.LENGTH_LONG).show()
             }
 
+            if (Remote.broadcasts.clashRunning) {
+                loadSite()
+                return@launch
+            }
+
+            webView.postDelayed(loadTimeout, 8000)
             val req = startClashService()
             if (req != null) {
                 vpnAuthLauncher.launch(req)
-            } else if (Remote.broadcasts.clashRunning) {
-                loadUrlNow()
             }
         }
     }
@@ -215,7 +228,9 @@ class WebActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        Remote.broadcasts.removeObserver(observer)
+        Remote.broadcasts.removeObserver(clashObserver)
+        webView.removeCallbacks(loadTimeout)
+        CookieManager.getInstance().flush()
         scope.cancel()
         super.onDestroy()
     }
