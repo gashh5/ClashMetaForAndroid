@@ -3,13 +3,22 @@ package com.github.kr328.clash
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.github.kr328.clash.service.model.Profile
 import com.github.kr328.clash.util.startClashService
 import com.github.kr328.clash.util.withProfile
@@ -21,6 +30,7 @@ import kotlinx.coroutines.launch
 class WebActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var loadingView: View
     private val scope = MainScope()
     private var loginAttempts = 0
     private var loginDone = false
@@ -40,8 +50,33 @@ class WebActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val root = FrameLayout(this)
         webView = WebView(this)
-        setContentView(webView)
+        loadingView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(ProgressBar(this@WebActivity).apply { isIndeterminate = true })
+            addView(TextView(this@WebActivity).apply {
+                text = "正在连接代理，请稍候…"
+                setPadding(0, 24, 0, 0)
+            })
+        }
+        root.addView(
+            webView,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        )
+        root.addView(
+            loadingView,
+            FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        )
+        setContentView(root)
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            v.setPadding(0, top, 0, 0)
+            insets
+        }
+
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
 
@@ -61,7 +96,10 @@ class WebActivity : AppCompatActivity() {
                     ) { r ->
                         when (r) {
                             "\"RESTRICTED\"" -> view?.loadUrl(LOGIN_URL)
-                            "\"OK\"" -> mainLoaded = true
+                            "\"OK\"" -> {
+                                mainLoaded = true
+                                loadingView.visibility = View.GONE
+                            }
                         }
                     }
                     return
