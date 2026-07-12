@@ -19,12 +19,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.github.kr328.clash.remote.Broadcasts
+import com.github.kr328.clash.remote.Remote
 import com.github.kr328.clash.service.model.Profile
 import com.github.kr328.clash.util.startClashService
 import com.github.kr328.clash.util.withProfile
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class WebActivity : AppCompatActivity() {
@@ -35,13 +36,30 @@ class WebActivity : AppCompatActivity() {
     private var loginAttempts = 0
     private var loginDone = false
     private var mainLoaded = false
+    private var urlLoaded = false
+
+    private val observer = object : Broadcasts.Observer {
+        override fun onStarted() { loadUrlNow() }
+        override fun onServiceRecreated() {}
+        override fun onStopped(cause: String?) {}
+        override fun onProfileChanged() {}
+        override fun onProfileUpdateCompleted(uuid: java.util.UUID?) {}
+        override fun onProfileUpdateFailed(uuid: java.util.UUID?, reason: String?) {}
+        override fun onProfileLoaded() {}
+    }
+
+    private fun loadUrlNow() {
+        if (urlLoaded) return
+        urlLoaded = true
+        webView.post { webView.loadUrl(SITE_URL) }
+    }
 
     private val vpnAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { r ->
         if (r.resultCode == RESULT_OK) {
-            startClashService()
-            webView.postDelayed({ webView.loadUrl(SITE_URL) }, 2500)
+            if (Remote.broadcasts.clashRunning) loadUrlNow()
+            else startClashService()
         } else {
             Toast.makeText(this, "未授权 VPN，代理无法启动", Toast.LENGTH_LONG).show()
         }
@@ -132,6 +150,9 @@ class WebActivity : AppCompatActivity() {
             }
         })
 
+        Remote.broadcasts.addObserver(observer)
+        webView.postDelayed({ loadUrlNow() }, 8000)
+
         connectAndLoad()
     }
 
@@ -152,9 +173,8 @@ class WebActivity : AppCompatActivity() {
             val req = startClashService()
             if (req != null) {
                 vpnAuthLauncher.launch(req)
-            } else {
-                delay(2500)
-                webView.loadUrl(SITE_URL)
+            } else if (Remote.broadcasts.clashRunning) {
+                loadUrlNow()
             }
         }
     }
@@ -195,6 +215,7 @@ class WebActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        Remote.broadcasts.removeObserver(observer)
         scope.cancel()
         super.onDestroy()
     }
