@@ -201,29 +201,6 @@ class WebActivity : AppCompatActivity() {
         webView.evaluateJavascript(js, null)
     }
 
-    private fun preconnectHosts() {
-        val js = """
-            (function(){
-              var hosts={};
-              document.querySelectorAll('a[href],img[src],script[src],link[href],source[src]').forEach(function(e){
-                var u=e.href||e.src||e.getAttribute('href')||e.getAttribute('src');
-                if(!u)return;
-                try{
-                  var h=new URL(u,location.href).origin;
-                  if(h&&h!==location.origin&&!hosts[h]){
-                    hosts[h]=1;
-                    var l=document.createElement('link');
-                    l.rel='preconnect';l.href=h;
-                    document.head.appendChild(l);
-                  }
-                }catch(e){}
-              });
-              return Object.keys(hosts).join(',');
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
-    }
-
     private fun connectAndLoad() {
         scope.launch {
             try {
