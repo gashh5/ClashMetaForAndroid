@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -41,8 +42,16 @@ class WebActivity : AppCompatActivity() {
     private var loginDone = false
     private var mainLoaded = false
     private var urlLoaded = false
+    private var navClickBound = false
 
     private val loadTimeout = Runnable { loadSite() }
+
+    private inner class NavBridge {
+        @JavascriptInterface
+        fun onNavStart() {
+            webView.post { navProgress.visibility = View.VISIBLE }
+        }
+    }
 
     private val clashObserver = object : Broadcasts.Observer {
         override fun onStarted() {
@@ -107,6 +116,7 @@ class WebActivity : AppCompatActivity() {
 
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        webView.addJavascriptInterface(NavBridge(), "AndroidNav")
 
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
@@ -136,6 +146,10 @@ class WebActivity : AppCompatActivity() {
                                 mainLoaded = true
                                 loadingView.visibility = View.GONE
                                 CookieManager.getInstance().flush()
+                                if (!navClickBound) {
+                                    navClickBound = true
+                                    webView.evaluateJavascript("document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a'):null;if(a&&a.href&&a.href.indexOf('javascript:')!==0){try{AndroidNav.onNavStart();}catch(x){}}},true);", null)
+                                }
                             }
                         }
                     }
