@@ -39,7 +39,6 @@ class WebActivity : AppCompatActivity() {
     private var loginDone = false
     private var mainLoaded = false
     private var urlLoaded = false
-    private var prewarmed = false
 
     private val loadTimeout = Runnable { loadSite() }
 
@@ -123,10 +122,6 @@ class WebActivity : AppCompatActivity() {
                                 mainLoaded = true
                                 loadingView.visibility = View.GONE
                                 CookieManager.getInstance().flush()
-                                if (!prewarmed) {
-                                    prewarmed = true
-                                    prewarmLinks()
-                                }
                             }
                         }
                     }
@@ -168,25 +163,6 @@ class WebActivity : AppCompatActivity() {
         if (urlLoaded) return
         urlLoaded = true
         webView.loadUrl(SITE_URL)
-    }
-
-    private fun prewarmLinks() {
-        val js = """
-            (function(){
-              var seen={};
-              var links=Array.prototype.slice.call(document.querySelectorAll('a[href]'))
-                .map(function(a){return a.href;})
-                .filter(function(u){
-                  if(!u||seen[u])return false;
-                  seen[u]=1;
-                  try{return new URL(u).origin===location.origin;}catch(e){return false;}
-                })
-                .slice(0,10);
-              links.forEach(function(u){try{fetch(u,{mode:'no-cors',credentials:'include'});}catch(e){}});
-              return links.length;
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
     }
 
     private fun connectAndLoad() {
