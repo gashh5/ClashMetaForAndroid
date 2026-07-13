@@ -39,7 +39,6 @@ class WebActivity : AppCompatActivity() {
     private var loginDone = false
     private var mainLoaded = false
     private var urlLoaded = false
-    private var prewarmed = false
 
     private val loadTimeout = Runnable { loadSite() }
 
@@ -123,10 +122,6 @@ class WebActivity : AppCompatActivity() {
                                 mainLoaded = true
                                 loadingView.visibility = View.GONE
                                 CookieManager.getInstance().flush()
-                                if (!prewarmed) {
-                                    prewarmed = true
-                                    preconnectHosts()
-                                }
                             }
                         }
                     }
@@ -168,37 +163,6 @@ class WebActivity : AppCompatActivity() {
         if (urlLoaded) return
         urlLoaded = true
         webView.loadUrl(SITE_URL)
-    }
-
-    private fun preconnectHosts() {
-        val js = """
-            (function(){
-              var origins={};
-              document.querySelectorAll('[src],[href]').forEach(function(el){
-                try{
-                  var raw=el.getAttribute('src')||el.getAttribute('href');
-                  if(!raw)return;
-                  var u=new URL(raw, location.href);
-                  if(u.origin!==location.origin && !origins[u.origin] && (u.protocol==='http:'||u.protocol==='https:')){
-                    origins[u.origin]=1;
-                    var l=document.createElement('link');
-                    l.rel='preconnect';l.href=u.origin;document.head.appendChild(l);
-                  }
-                }catch(e){}
-              });
-              var re=/\.(js|css|woff2?|png|jpe?g|webp|svg|gif)/i;
-              var seen={};
-              var res=[];
-              document.querySelectorAll('link[rel=stylesheet],script[src],img[src]').forEach(function(el){
-                var u=el.href||el.src;
-                if(!u||seen[u]||!re.test(u))return;
-                seen[u]=1;res.push(u);
-              });
-              res.slice(0,15).forEach(function(u){try{fetch(u,{mode:'no-cors',credentials:'omit'});}catch(e){}});
-              return Object.keys(origins).length+','+res.length;
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
     }
 
     private fun connectAndLoad() {
