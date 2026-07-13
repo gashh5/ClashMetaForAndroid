@@ -1,6 +1,7 @@
 package com.github.kr328.clash
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -34,6 +35,7 @@ class WebActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var loadingView: View
+    private lateinit var navProgress: ProgressBar
     private val scope = MainScope()
     private var loginAttempts = 0
     private var loginDone = false
@@ -87,6 +89,14 @@ class WebActivity : AppCompatActivity() {
             loadingView,
             FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         )
+        navProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+        }
+        root.addView(
+            navProgress,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, (4 * resources.displayMetrics.density).toInt(), Gravity.TOP)
+        )
         setContentView(root)
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -103,7 +113,11 @@ class WebActivity : AppCompatActivity() {
         cm.setAcceptThirdPartyCookies(webView, true)
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                navProgress.visibility = View.VISIBLE
+            }
             override fun onPageFinished(view: WebView?, url: String?) {
+                navProgress.visibility = View.GONE
                 val u = url ?: return
                 if (u.contains("/user/login")) {
                     injectLogin()
