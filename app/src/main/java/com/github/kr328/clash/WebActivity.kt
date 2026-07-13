@@ -173,6 +173,37 @@ class WebActivity : AppCompatActivity() {
     private fun preconnectHosts() {
         val js = """
             (function(){
+              var origins={};
+              document.querySelectorAll('[src],[href]').forEach(function(el){
+                try{
+                  var raw=el.getAttribute('src')||el.getAttribute('href');
+                  if(!raw)return;
+                  var u=new URL(raw, location.href);
+                  if(u.origin!==location.origin && !origins[u.origin] && (u.protocol==='http:'||u.protocol==='https:')){
+                    origins[u.origin]=1;
+                    var l=document.createElement('link');
+                    l.rel='preconnect';l.href=u.origin;document.head.appendChild(l);
+                  }
+                }catch(e){}
+              });
+              var re=/\.(js|css|woff2?|png|jpe?g|webp|svg|gif)/i;
+              var seen={};
+              var res=[];
+              document.querySelectorAll('link[rel=stylesheet],script[src],img[src]').forEach(function(el){
+                var u=el.href||el.src;
+                if(!u||seen[u]||!re.test(u))return;
+                seen[u]=1;res.push(u);
+              });
+              res.slice(0,15).forEach(function(u){try{fetch(u,{mode:'no-cors',credentials:'omit'});}catch(e){}});
+              return Object.keys(origins).length+','+res.length;
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    private fun preconnectHosts() {
+        val js = """
+            (function(){
               var hosts={};
               document.querySelectorAll('a[href],img[src],script[src],link[href],source[src]').forEach(function(e){
                 var u=e.href||e.src||e.getAttribute('href')||e.getAttribute('src');
